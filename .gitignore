@@ -6,3 +6,11 @@ __pycache__/
 *.db
 *.sqlite3
 
+# local/dev artifacts
+.DS_Store
+.http-server.pid
+.http-server.port
+.venv/
+bg-demo.zip
+70_Broadcast_Gain_A_2_Byte_Sto.pdf
+70_Broadcast_Gain_A_2_Byte_Sto.txt
