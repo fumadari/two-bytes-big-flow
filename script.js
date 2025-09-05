@@ -470,7 +470,7 @@ function updateMetrics(){
     if (embedMode){
       // report up to parent for compare badge
       try{
-        window.parent.postMessage({type:'metrics', id: embedId, p95, flow: flowRate, idle: idlePct}, '*');
+        window.parent.postMessage({type:'metrics', id: embedId, p95, flow: flowRate, idle: idlePct, steps: m.steps}, '*');
       }catch(e){}
     }
   }
@@ -829,11 +829,15 @@ function updateCompareBadge(){
   const off = compareStats.off, on = compareStats.on;
   if (!el) return;
   if (!off || !on){ el.textContent = 'BG: —'; return; }
+  // Wait for both panes to warm up to avoid noisy early stats
+  const minSteps = 120;
+  if (!(off.steps>=minSteps && on.steps>=minSteps)) { el.textContent = 'warming up…'; return; }
   // Percentage improvements (higher-is-better for flow; lower-is-better for p95 and idle)
   const pct = (num) => (Math.abs(num) >= 9.95 ? Math.round(num) : num.toFixed(1));
-  const flowAdv = ((on.flow - off.flow) / Math.max(1e-6, off.flow)) * 100;
-  const p95Gain = ((off.p95 - on.p95) / Math.max(1e-6, off.p95)) * 100;
-  const idleGain = ((off.idle - on.idle) / Math.max(1e-6, off.idle)) * 100;
+  const base = (v)=> Math.max(1e-6, v);
+  const flowAdv = ((on.flow - off.flow) / base(off.flow)) * 100;       // + = better
+  const p95Gain = ((off.p95 - on.p95) / base(off.p95)) * 100;          // + = better (p95 smaller)
+  const idleGain = ((off.idle - on.idle) / base(off.idle)) * 100;      // + = better (idle smaller)
   const s = (v)=> (v>=0?'+':'') + pct(v) + '%';
   el.textContent = `Flow ${s(flowAdv)}   |   p95 ${s(p95Gain)}   |   Idle ${s(idleGain)}`;
 }
