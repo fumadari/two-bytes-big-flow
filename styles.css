@@ -20,13 +20,13 @@ h1{font-weight:700;font-size:18px;margin:0}
 #toast{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:#121a33;color:var(--fg);border:1px solid #1b244a;border-radius:8px;padding:8px 12px;font-size:12px}
 #badge{position:absolute;top:12px;left:12px;background:#121a33cc;color:var(--fg);border:1px solid #1b244a;border-radius:8px;padding:6px 10px;font-size:12px;backdrop-filter: blur(6px)}
 
-#compare{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}
+#compare{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px;position:relative}
 #compare.hidden{display:none}
 #compare .col{position:relative;background:#0f1430;border:1px solid #1b244a;border-radius:10px;overflow:hidden}
 #compare .colHead{position:absolute;top:8px;left:8px;background:#121a33cc;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid #1b244a;z-index:2}
 #compare iframe{width:100%;height:60vh;border:0;display:block}
 
-.cmpBadge{position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:3;background:#121a33e6;padding:6px 10px;border-radius:999px;border:1px solid #1b244a;color:var(--fg);font-size:12px;backdrop-filter: blur(6px)}
+.cmpBadge{position:absolute;left:50%;top:46px;transform:translateX(-50%);z-index:8;background:#121a33e6;padding:6px 10px;border-radius:999px;border:1px solid #1b244a;color:var(--fg);font-size:12px;backdrop-filter: blur(6px)}
 
 @media (max-width: 900px){
   #compare{grid-template-columns:1fr}

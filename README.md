@@ -1,8 +1,8 @@
-## Two Bytes, Big Flow — BG Demo
+## Broadcast Gain — BG Demo
 
 A tiny, phone-friendly visual demo of Broadcast-Gain (BG): a 2-byte, stop‑gradient neighbor broadcast that trims tail wait and boosts near‑gate flow under bursty loss.
 
-- Live compare: BG OFF vs BG ON (default)
+- Live compare: BG OFF vs BG ON
 - Simple metric badge: “BG advantage: +X% throughput”
 - Subtle, intuitive visuals: packet flights, consensus gauges, min‑green stretch, lead‑car nudges
 - Pure static site (no build). Works on GitHub Pages.
@@ -66,4 +66,3 @@ git push -u origin main
 - Add a `CNAME` file if you want a custom domain.
 
 Enjoy!
-
