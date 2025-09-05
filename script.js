@@ -266,9 +266,11 @@ function schedulerStep() {
   const Uother = state.agg[other].U;
   const qCur = axisQueue(cur), qOther = axisQueue(other);
 
-  // track green/no-demand
+  // track green/no-demand: idle only when truly no demand now or soon
   state.metrics.greenSteps++;
-  if (qCur.totalNear === 0) state.metrics.greenIdleSteps++;
+  const demandNow = qCur.totalNear > 0;
+  const demandSoon = qCur.minDist <= (nearGateDist + 30); // within ~1–2 car lengths
+  if (!(demandNow || demandSoon)) state.metrics.greenIdleSteps++;
 
   const minG = params.minGreen + (bgToggle.checked? params.kLowInfo * (1 - rho): 0);
   state.effMinGreen = minG;
@@ -304,15 +306,17 @@ function switchPhase(reason='thresh'){
 
 function axisQueue(axis){
   // compute total near-gate count and max wait on that axis
-  let totalNear=0, maxWait=0;
+  let totalNear=0, maxWait=0, minDist=Infinity;
   for (const c of state.cars){
     if (c.axis!==axis) continue;
-    if (distToStop(c) <= nearGateDist+2) {
+    const d = distToStop(c);
+    if (d <= nearGateDist+2) {
       totalNear++;
       maxWait = Math.max(maxWait, c.waited);
     }
+    if (d < minDist) minDist = d;
   }
-  return {totalNear, maxWait};
+  return {totalNear, maxWait, minDist};
 }
 
 // Movement & crossing rules
