@@ -279,7 +279,15 @@ function schedulerStep() {
   const thresh = params.switchThresh + (bgToggle.checked? (1 - rho)*1.5 : 0);
 
   let forceSwitch = false;
-  if (state.greenAge < minG) return; // enforce min green
+  if (state.greenAge < minG) {
+    // Enforce min green, but under BG allow early switch if current axis truly has no imminent demand
+    if (bgToggle.checked) {
+      const hasDemandCur = (qCur.totalNear > 0) || (qCur.minDist <= nearGateDist + 10);
+      const hasDemandOther = (qOther.totalNear > 0) || (qOther.minDist <= nearGateDist + 10);
+      if (!hasDemandCur && hasDemandOther) { switchPhase('idleEscape'); return; }
+    }
+    return;
+  }
   if (qOther.maxWait > params.fairnessCap) forceSwitch = true;
   if (state.greenAge >= maxG) forceSwitch = true;
 
@@ -834,7 +842,7 @@ function updateCompareBadge(){
   if (!el) return;
   if (!off || !on){ el.textContent = 'BG: —'; return; }
   // Wait for both panes to warm up to avoid noisy early stats
-  const minSteps = 120;
+  const minSteps = 180; // wait a bit longer for stable idle ratios
   if (!(off.steps>=minSteps && on.steps>=minSteps)) { el.textContent = 'warming up…'; return; }
   // Percentage improvements (higher-is-better for flow; lower-is-better for p95 and idle)
   const pct = (num) => (Math.abs(num) >= 9.95 ? Math.round(num) : num.toFixed(1));
