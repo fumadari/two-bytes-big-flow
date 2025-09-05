@@ -507,11 +507,47 @@ function draw(){
   ctx.clearRect(0,0,W,H);
   drawRoads();
   drawSignals();
-  // Minimal broadcast-only visuals
+  // Minimal visuals
+  drawConsensusBar();
+  // Broadcast Wi‑Fi rings when BG is ON
   drawWifiBursts();
   drawCars();
   // Optionally still show push flashes subtly (but disabled for simplicity)
   // drawPushFlashes();
+}
+
+function drawConsensusBar(){
+  // Simple, compact consensus gauge: center pill with dot toward favored axis
+  const uH = state.agg.H.U || 0, uV = state.agg.V.U || 0;
+  const rho = ((state.agg.H.rho||0) + (state.agg.V.rho||0)) / 2;
+  const v = clamp((uH - uV)/2, -1, 1); // -1 favors V, +1 favors H
+  const w = 140, h = 8, r = 6;
+  const x = cx - w/2, y = 12;
+  // background
+  ctx.fillStyle = '#1a2148';
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.fill();
+  // left (V) and right (H) fills, intensity by rho
+  ctx.globalAlpha = 0.5 + 0.5*rho;
+  ctx.fillStyle = COL.accent; // V tint
+  ctx.fillRect(x, y, w/2, h);
+  ctx.fillStyle = COL.accent2; // H tint
+  ctx.fillRect(x+w/2, y, w/2, h);
+  ctx.globalAlpha = 1;
+  // center marker
+  ctx.fillStyle = '#2c3973';
+  ctx.fillRect(x+w/2-1, y, 2, h);
+  // dot indicating preference
+  const dotX = x + w/2 + v*(w/2 - 6);
+  ctx.beginPath();
+  ctx.arc(dotX, y+h/2, 4, 0, Math.PI*2);
+  ctx.fillStyle = v>=0 ? COL.accent2 : COL.accent;
+  ctx.fill();
 }
 
 function drawGuideOverlay(){
@@ -673,35 +709,10 @@ function drawCars(){
     ctx.fillRect(-w/2,-h/2,w,h);
     ctx.restore();
 
-    // 2-byte bubble for near-gate cars
-    if (c.nearGate){
-      const urg = clamp(0.7*norm(queueDepthAhead(c),0,8) + 0.3*norm(c.waited,0,240), -1, 1);
-      const b0 = muEncode(urg);
-      const distBin = clamp(Math.floor((nearGateDist - distToStop(c))/ (nearGateDist/127)), 0, 127);
-      drawBubble(c.x, c.y - 14, b0, distBin, c.axis);
-    }
+    // Bubbles with numbers are hidden for simplicity
   }
 }
 
-function drawBubble(x,y,b0,dbin,axis){
-  const color = axis==='H'? COL.bubbleH : COL.bubbleV;
-  ctx.save();
-  ctx.translate(x,y);
-  ctx.fillStyle = '#0009';
-  ctx.strokeStyle = color; ctx.lineWidth=1;
-  ctx.beginPath();
-  ctx.roundRect?.( -18, -10, 36, 18, 4 );
-  if (!ctx.roundRect){ ctx.rect(-18,-10,36,18); }
-  ctx.fill(); ctx.stroke();
-  // bar for |b0|
-  const mag = Math.abs(b0)/127;
-  ctx.fillStyle = color;
-  ctx.fillRect(-16, -6, 32*mag, 4);
-  // dist bin text
-  ctx.fillStyle = COL.muted; ctx.font='9px monospace'; ctx.textAlign='center';
-  ctx.fillText(dbin.toString(), 0, 8);
-  ctx.restore();
-}
 
 // Main loop
 let lastTs = performance.now();
