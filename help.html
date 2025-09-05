@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Broadcast Gain — What’s Going On</title>
+    <title>Broadcast Gain: What’s Going On</title>
     <link rel="stylesheet" href="styles.css" />
     <style>
       body{max-width:900px;margin:0 auto;padding:16px}
@@ -15,20 +15,13 @@
     </style>
   </head>
   <body>
-    <h1>Broadcast Gain — What’s Going On</h1>
+    <h1>Broadcast Gain: What’s Going On</h1>
     <div class="card">
-      <p><b>Goal:</b> show how a tiny, neighbor‑only <b>2‑byte</b> broadcast trims long‑tail wait and boosts flow under lossy comms — without retraining.</p>
+      <p><b>Goal:</b> show how a tiny, neighbor‑only <b>2‑byte</b> broadcast trims long‑tail wait and boosts flow under lossy comms, without retraining.</p>
       <p><b>BG OFF:</b> fixed min‑green, naive switch on queue diff → more idle‑green and knife‑edge stalls.</p>
       <p><b>BG ON:</b> near‑gate cars send <b>2 bytes</b> (urgency + axis/distance). Neighbors fuse into a light <b>consensus + confidence</b> cue to stretch greens under weak info and tilt switch decisions under strong info. A <b>tiny nudge</b> helps the lead car on green break ties (never on red).</p>
     </div>
-    <div class="card">
-      <p><span class="pill">Wi‑Fi waves</span> Agents broadcasting their 2‑byte hints (BG ON only).</p>
-      <p>Compare view just shows BG OFF vs BG ON visually. No numbers, only behavior.</p>
-    </div>
-    <div class="card">
-      <p><b>Under the hood:</b> 2 bytes per cycle per agent (~0.24 kbit/s @ 60 Hz, C=4). A few scalar ops per step; no training through the channel.</p>
-      <p><b>Safety:</b> never nudges on red; clip small logit shift; single green phase.</p>
-    </div>
+    
     <p><a class="btn" href="./" rel="noopener">Back to demo</a></p>
   </body>
   </html>
