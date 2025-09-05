@@ -121,6 +121,10 @@ function resetSim() {
       packets: [], // {axis, x0,y0, x1,y1, t:0..1}
       pulses: {H:0, V:0},
       pushFlashes: [], // {x,y, axis, dir, life}
+      broadcastPulse: 0,
+      nudgePulse: 0,
+      tiltPulse: 0,
+      lastSwitchReason: 'init'
     }
   };
   // preload some cars to show queues quickly
@@ -176,13 +180,15 @@ function maybeBroadcast(car) {
   state.packets[car.axis].push({b0, b1, ts: state.t, age:0});
   state.metrics.bitsSent += 16; // two bytes
   // visual packet animation towards axis aggregator (sample to avoid overwhelm)
-  const visProb = bgToggle.checked ? 0.45 : 0.12;
+  const visProb = bgToggle.checked ? 0.32 : 0.08;
   if (Math.random() < visProb){
     const {x:x1, y:y1} = aggregatorPos(car.axis);
     const arr = state.vis.packets;
     if (arr.length > 40) arr.shift();
     arr.push({axis:car.axis, x0:car.x, y0:car.y-10, x1, y1, t:0});
   }
+  // pulse broadcast chip
+  state.vis.broadcastPulse = Math.min(1, state.vis.broadcastPulse + 0.45);
 }
 
 function norm(x, lo, hi){ return clamp((x-lo)/(hi-lo+1e-6), 0, 1)*2-1; } // [-1,1]
@@ -269,18 +275,24 @@ function schedulerStep() {
   if (state.greenAge >= maxG) forceSwitch = true;
 
   if (!bgToggle.checked) {
-    if (forceSwitch || qDiff > thresh) switchPhase();
+    if (forceSwitch) { switchPhase('forced'); return; }
+    if (qDiff > thresh) switchPhase('thresh');
     return;
   }
   // BG ON: use consensus to resist switching unless confident advantage
   const demoBoost = 1.4; // exaggerate for clarity when BG is ON
   const adjDiff = qDiff - (params.kConsensus*demoBoost) * Uother;
-  if (forceSwitch || adjDiff > thresh) switchPhase();
+  if (forceSwitch) { switchPhase('forced'); return; }
+  if (adjDiff > thresh) switchPhase('consensus');
 }
 
-function switchPhase(){
+function switchPhase(reason='thresh'){
   state.phase = (state.phase==='H')? 'V':'H';
   state.greenAge = 0;
+  state.vis.lastSwitchReason = reason;
+  if (bgToggle.checked && reason==='consensus') {
+    state.vis.tiltPulse = 1;
+  }
 }
 
 function axisQueue(axis){
@@ -386,6 +398,7 @@ function applyBGPush(){
   lead.logit = clamp(lead.logit + push, -params.clipA, params.clipA);
   if (push > 0.02) {
     state.vis.pushFlashes.push({x:lead.x, y:lead.y, axis, dir:lead.dir, life:18});
+    state.vis.nudgePulse = 1;
   }
 }
 
@@ -466,6 +479,9 @@ function updateVisuals(){
   // decay pulses
   state.vis.pulses.H *= 0.85;
   state.vis.pulses.V *= 0.85;
+  state.vis.broadcastPulse *= 0.90;
+  state.vis.nudgePulse *= 0.90;
+  state.vis.tiltPulse *= 0.92;
   // decay push flashes
   const pf=[]; for (const f of state.vis.pushFlashes){ f.life -= 1; if (f.life>0) pf.push(f);} state.vis.pushFlashes = pf;
 }
@@ -486,6 +502,46 @@ function draw(){
   drawPacketAnimations();
   drawCars();
   drawPushFlashes();
+  if (bgToggle.checked) drawGuideOverlay();
+}
+
+function drawGuideOverlay(){
+  // Draw three explanatory chips at top center: Broadcast 2B, Consensus (ρ), Nudge
+  const baseX = cx; const baseY = 36; const gap = 94; const w = 86; const h = 24; const r = 12;
+  // Broadcast chip
+  const bA = 0.4 + 0.6*clamp(state.vis.broadcastPulse, 0, 1);
+  drawChip(baseX - gap, baseY, w, h, r, 'Broadcast', '2B', `rgba(109,229,201,${bA})`);
+  // Consensus chip: show rho and strongest axis
+  const aH = Math.abs(state.agg.H.U), aV = Math.abs(state.agg.V.U);
+  const best = aH>=aV? 'H' : 'V';
+  const rho = (state.agg.H.rho + state.agg.V.rho)/2;
+  const cA = 0.35 + 0.65*rho;
+  drawChip(baseX, baseY, w+8, h, r, 'Consensus', `${best} ρ=${rho.toFixed(2)}`, `rgba(143,168,255,${cA})`);
+  // Nudge chip
+  const nA = 0.35 + 0.65*clamp(state.vis.nudgePulse, 0, 1);
+  drawChip(baseX + gap, baseY, w, h, r, 'Nudge', 'lead car', `rgba(94,247,201,${nA})`);
+  // Tilt switch callout
+  if (state.vis.tiltPulse>0.05){
+    const a = state.vis.tiltPulse;
+    ctx.save(); ctx.globalAlpha = a*0.9; ctx.fillStyle = '#5cd7ff'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('consensus tilt', cx, baseY + 34);
+    ctx.restore();
+  }
+}
+
+function drawChip(x, y, w, h, r, title, value, strokeColor){
+  ctx.save();
+  // background
+  ctx.fillStyle = '#121a33cc';
+  roundRect(x - w/2, y - h/2, w, h, r, true, false);
+  // border glow
+  ctx.strokeStyle = strokeColor; ctx.lineWidth = 1.5; roundRect(x - w/2, y - h/2, w, h, r, false, true);
+  // text
+  ctx.fillStyle = COL.muted; ctx.font='10px sans-serif'; ctx.textAlign='center';
+  ctx.fillText(title, x, y - 2);
+  ctx.fillStyle = COL.text; ctx.font='bold 11px sans-serif';
+  ctx.fillText(value, x, y + 9);
+  ctx.restore();
 }
 
 function drawRoads(){
@@ -542,32 +598,52 @@ function drawLight(x,y,green){
 }
 
 function drawConsensusGauges(){
-  // two gauges near top corners
-  drawGauge(90, 60, state.agg.H.U, state.agg.H.rho, 'H', state.vis.pulses.H);
-  drawGauge(W-90, 60, state.agg.V.U, state.agg.V.rho, 'V', state.vis.pulses.V);
+  // Minimal pill bars at top corners: length shows U, border intensity shows rho
+  drawPill(16, 14, 'H', state.agg.H.U, state.agg.H.rho, state.vis.pulses.H, 'left');
+  drawPill(W-96, 14, 'V', state.agg.V.U, state.agg.V.rho, state.vis.pulses.V, 'right');
 }
 
-function drawGauge(x, y, U, rho, label, pulse=0){
-  const r = 36; const t = 6;
+function drawPill(x, y, label, U, rho, pulse=0, align='left'){
+  const w = 80, h = 8, r = 6;
   ctx.save();
-  ctx.translate(x,y);
-  ctx.beginPath();
-  ctx.arc(0,0,r,0,Math.PI*2);
-  ctx.strokeStyle = '#2a346a'; ctx.lineWidth = t; ctx.stroke();
-  // outer ring confidence
-  ctx.beginPath();
-  ctx.arc(0,0,r+6+pulse*3, -Math.PI/2, -Math.PI/2 + rho*2*Math.PI);
-  ctx.strokeStyle = COL.accent; ctx.lineWidth = 3 + pulse*2; ctx.globalAlpha = 0.8;
-  ctx.stroke(); ctx.globalAlpha = 1;
-  // needle for U
-  const ang = (U*0.5 + 0.5) * 2*Math.PI; // map [-1,1] to [0,2π]
-  ctx.beginPath();
-  ctx.moveTo(0,0); ctx.lineTo((r-8)*Math.cos(ang), (r-8)*Math.sin(ang));
-  ctx.strokeStyle = COL.accent2; ctx.lineWidth = 2; ctx.stroke();
-  // text
-  ctx.fillStyle = COL.text; ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
-  ctx.fillText(`${label}`, 0, 4);
+  // background
+  ctx.fillStyle = '#1a2148';
+  roundRect(x, y, w, h, r, true, false);
+  // zero marker
+  ctx.fillStyle = '#2c3973';
+  const zeroX = x + w/2 - 1;
+  ctx.fillRect(zeroX, y, 2, h);
+  // value fill from center based on sign
+  const v = Math.max(-1, Math.min(1, U));
+  const half = w/2;
+  if (v >= 0){
+    ctx.fillStyle = COL.accent2; ctx.globalAlpha = 0.75 + 0.25*(rho);
+    roundRect(x+half, y, half*v, h, r, true, false);
+  } else {
+    ctx.fillStyle = COL.accent; ctx.globalAlpha = 0.75 + 0.25*(rho);
+    roundRect(x+half + half*v, y, -half*v, h, r, true, false);
+  }
+  ctx.globalAlpha = 1;
+  // border intensity reflects rho (confidence) + pulse on packet arrival
+  ctx.lineWidth = 1.5 + pulse*1.5 + rho*0.8;
+  ctx.strokeStyle = `rgba(109,229,201,${0.4+0.4*rho})`;
+  roundRect(x, y, w, h, r, false, true);
+  // label
+  ctx.fillStyle = COL.muted; ctx.font='10px sans-serif'; ctx.textAlign = align==='left'?'left':'right';
+  const tx = align==='left' ? x : x+w;
+  ctx.fillText(label, tx, y-2);
   ctx.restore();
+}
+
+function roundRect(x, y, w, h, r, fill, stroke){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  if (fill) ctx.fill();
+  if (stroke) ctx.stroke();
 }
 
 function drawPacketAnimations(){
@@ -744,9 +820,7 @@ function init(){
         onf.src = location.pathname + '?embed=1&bg=1&id=on';
       }
     });
-    // default to compare ON
-    compareToggle.checked = true;
-    compareToggle.dispatchEvent(new Event('change'));
+    // default: single view; compare remains available via toggle
     // receive metrics from iframes
     window.addEventListener('message', (ev)=>{
       const d = ev.data || {};
