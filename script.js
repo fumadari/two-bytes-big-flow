@@ -124,7 +124,8 @@ function resetSim() {
       broadcastPulse: 0,
       nudgePulse: 0,
       tiltPulse: 0,
-      lastSwitchReason: 'init'
+      lastSwitchReason: 'init',
+      wifiBursts: [] // {car, t}
     }
   };
   // preload some cars to show queues quickly
@@ -180,7 +181,7 @@ function maybeBroadcast(car) {
   state.packets[car.axis].push({b0, b1, ts: state.t, age:0});
   state.metrics.bitsSent += 16; // two bytes
   // visual packet animation towards axis aggregator (sample to avoid overwhelm)
-  const visProb = bgToggle.checked ? 0.32 : 0.08;
+  const visProb = bgToggle.checked ? 0.24 : 0.00;
   if (Math.random() < visProb){
     const {x:x1, y:y1} = aggregatorPos(car.axis);
     const arr = state.vis.packets;
@@ -189,6 +190,11 @@ function maybeBroadcast(car) {
   }
   // pulse broadcast chip
   state.vis.broadcastPulse = Math.min(1, state.vis.broadcastPulse + 0.45);
+  // add wifi burst for this car
+  if (bgToggle.checked){
+    state.vis.wifiBursts.push({car, t:0});
+    if (state.vis.wifiBursts.length > 120) state.vis.wifiBursts.shift();
+  }
 }
 
 function norm(x, lo, hi){ return clamp((x-lo)/(hi-lo+1e-6), 0, 1)*2-1; } // [-1,1]
@@ -484,6 +490,8 @@ function updateVisuals(){
   state.vis.tiltPulse *= 0.92;
   // decay push flashes
   const pf=[]; for (const f of state.vis.pushFlashes){ f.life -= 1; if (f.life>0) pf.push(f);} state.vis.pushFlashes = pf;
+  // wifi bursts advance
+  const wb=[]; for (const w of state.vis.wifiBursts){ w.t += 0.06; if (w.t<=1.2) wb.push(w);} state.vis.wifiBursts = wb;
 }
 
 function avg(a){ return a.reduce((s,x)=>s+x,0)/a.length; }
@@ -498,11 +506,11 @@ function draw(){
   ctx.clearRect(0,0,W,H);
   drawRoads();
   drawSignals();
-  drawConsensusGauges();
-  drawPacketAnimations();
+  // Minimal broadcast-only visuals
+  drawWifiBursts();
   drawCars();
-  drawPushFlashes();
-  if (bgToggle.checked) drawGuideOverlay();
+  // Optionally still show push flashes subtly (but disabled for simplicity)
+  // drawPushFlashes();
 }
 
 function drawGuideOverlay(){
@@ -575,19 +583,7 @@ function drawSignals(){
   drawLight(cx - roadW/2 - 18, cy - stopOffset, !isH);
   drawLight(cx + roadW/2 + 18, cy + stopOffset, !isH);
 
-  // min-green stretch bar (subtle): only show if stretched > 6 steps
-  const base = params.minGreen, eff = state.effMinGreen;
-  if (eff - base > 6){
-    const pct = clamp(state.greenAge / Math.max(1, eff), 0, 1);
-    const barW = 160, barH = 6;
-    const x = cx - barW/2, y = 14;
-    ctx.fillStyle = '#223'; ctx.fillRect(x, y, barW, barH);
-    const baseW = Math.min(barW, barW * Math.min(1, base/eff));
-    ctx.fillStyle = '#3a4d9a'; ctx.fillRect(x, y, baseW*pct, barH);
-    const stretchW = barW - baseW;
-    ctx.fillStyle = '#5cd7ffcc';
-    ctx.fillRect(x+baseW, y, stretchW*pct, barH);
-  }
+  // No extra bars; keep signals clean
 }
 
 function drawLight(x,y,green){
@@ -597,53 +593,31 @@ function drawLight(x,y,green){
   ctx.fill();
 }
 
-function drawConsensusGauges(){
-  // Minimal pill bars at top corners: length shows U, border intensity shows rho
-  drawPill(16, 14, 'H', state.agg.H.U, state.agg.H.rho, state.vis.pulses.H, 'left');
-  drawPill(W-96, 14, 'V', state.agg.V.U, state.agg.V.rho, state.vis.pulses.V, 'right');
-}
+// remove compact consensus pills; use Wi-Fi rings instead
 
-function drawPill(x, y, label, U, rho, pulse=0, align='left'){
-  const w = 80, h = 8, r = 6;
-  ctx.save();
-  // background
-  ctx.fillStyle = '#1a2148';
-  roundRect(x, y, w, h, r, true, false);
-  // zero marker
-  ctx.fillStyle = '#2c3973';
-  const zeroX = x + w/2 - 1;
-  ctx.fillRect(zeroX, y, 2, h);
-  // value fill from center based on sign
-  const v = Math.max(-1, Math.min(1, U));
-  const half = w/2;
-  if (v >= 0){
-    ctx.fillStyle = COL.accent2; ctx.globalAlpha = 0.75 + 0.25*(rho);
-    roundRect(x+half, y, half*v, h, r, true, false);
-  } else {
-    ctx.fillStyle = COL.accent; ctx.globalAlpha = 0.75 + 0.25*(rho);
-    roundRect(x+half + half*v, y, -half*v, h, r, true, false);
+function drawWifiBursts(){
+  // Draw expanding wifi arcs around broadcasting near-gate cars
+  for (const b of state.vis.wifiBursts){
+    const c = b.car; if (!c) continue;
+    const x = c.x, y = c.y;
+    const t = b.t; // 0..1.2
+    const alpha = Math.max(0, 1 - t);
+    const baseR = 8 + t*28;
+    const spread = Math.PI/3; // +/- 60 degrees
+    const ang = (c.axis==='H' ? (c.dir>0? 0: Math.PI) : (c.dir>0? Math.PI/2 : -Math.PI/2));
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = c.axis==='H' ? 'rgba(109,229,201,0.8)' : 'rgba(143,168,255,0.8)';
+    ctx.globalAlpha = alpha*0.8;
+    for (let k=0;k<3;k++){
+      const r = baseR + k*6;
+      ctx.beginPath();
+      ctx.arc(x, y, r, ang - spread, ang + spread);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
   }
-  ctx.globalAlpha = 1;
-  // border intensity reflects rho (confidence) + pulse on packet arrival
-  ctx.lineWidth = 1.5 + pulse*1.5 + rho*0.8;
-  ctx.strokeStyle = `rgba(109,229,201,${0.4+0.4*rho})`;
-  roundRect(x, y, w, h, r, false, true);
-  // label
-  ctx.fillStyle = COL.muted; ctx.font='10px sans-serif'; ctx.textAlign = align==='left'?'left':'right';
-  const tx = align==='left' ? x : x+w;
-  ctx.fillText(label, tx, y-2);
-  ctx.restore();
-}
-
-function roundRect(x, y, w, h, r, fill, stroke){
-  ctx.beginPath();
-  ctx.moveTo(x+r, y);
-  ctx.arcTo(x+w, y, x+w, y+h, r);
-  ctx.arcTo(x+w, y+h, x, y+h, r);
-  ctx.arcTo(x, y+h, x, y, r);
-  ctx.arcTo(x, y, x+w, y, r);
-  if (fill) ctx.fill();
-  if (stroke) ctx.stroke();
 }
 
 function drawPacketAnimations(){
