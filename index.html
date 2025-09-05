@@ -29,13 +29,7 @@
       </header>
       <main id="stage">
         <canvas id="sim"></canvas>
-        <div id="hud">
-          <div class="chip"><span>p95</span><b id="p95">—</b></div>
-          <div class="chip"><span>flow/1k</span><b id="flow">—</b></div>
-          <div class="chip"><span>idle%</span><b id="idle">—</b></div>
-        </div>
         <div id="toast" hidden></div>
-        <div id="badge" hidden></div>
       </main>
       <section id="compare" class="hidden">
         <div class="col">
@@ -46,7 +40,6 @@
           <div class="colHead">BG ON</div>
           <iframe id="frameOn" title="BG ON" loading="eager"></iframe>
         </div>
-        <div id="cmpBadge" class="cmpBadge" title="Session averages">BG advantage: —</div>
       </section>
       <footer class="footnote">Tap canvas to toggle BG • 2 bytes/cycle • stop‑gradient</footer>
     </div>
