@@ -93,6 +93,7 @@ let embedMode = false;
 let presetBG = null;
 let embedId = null; // 'off' | 'on'
 let compareStats = { off: null, on: null };
+let compareUseWindow = true; // default to rolling window view
 let boostMode = true; // stretch scenario so BG dominates
 
 function resetSim() {
@@ -111,6 +112,7 @@ function resetSim() {
       steps: 0,
       greenIdleSteps: 0,
       greenSteps: 0,
+      window: { size: 450, idx: 0, crosses: Array(450).fill(0), green: Array(450).fill(0), idle: Array(450).fill(0) },
       servedH: 0,
       servedV: 0,
       bitsSent: 0,
@@ -270,7 +272,9 @@ function schedulerStep() {
   state.metrics.greenSteps++;
   const demandNow = qCur.totalNear > 0;
   const demandSoon = qCur.minDist <= (nearGateDist + 30); // within ~1–2 car lengths
-  if (!(demandNow || demandSoon)) state.metrics.greenIdleSteps++;
+  const idleNow = !(demandNow || demandSoon);
+  state._idleThisStep = idleNow;
+  if (idleNow) state.metrics.greenIdleSteps++;
 
   const minG = params.minGreen + (bgToggle.checked? params.kLowInfo * (1 - rho): 0);
   state.effMinGreen = minG;
@@ -330,6 +334,7 @@ function axisQueue(axis){
 // Movement & crossing rules
 function moveCars(){
   const speed = 1.8; // slightly slower for clarity and spacing
+  let crossesThisStep = 0;
   for (const car of state.cars){
     let canGo = false;
     // check if at stop line and green
@@ -361,6 +366,7 @@ function moveCars(){
       advance(car, 8 * car.dir);
       // count crossing once
       state.metrics.flowCount++;
+      crossesThisStep++;
       if (car.axis==='H') state.metrics.servedH++; else state.metrics.servedV++;
       // reset logit and waited
       car.waited = 0; car.logit = 0; car.arrivedAt = state.t;
@@ -369,6 +375,8 @@ function moveCars(){
       // nothing to do; will wait
     }
   }
+  // store step crosses for window metrics
+  state._stepCrosses = crossesThisStep;
   // remove cars that fully exited screen and respawn to sustain flow
   state.cars = state.cars.filter(c => inBounds(c));
 }
@@ -479,10 +487,21 @@ function updateMetrics(){
 
     const idlePct = m.greenSteps>0? (m.greenIdleSteps/m.greenSteps*100):0;
     idleEl.textContent = idlePct.toFixed(1);
+    // rolling window update (last ~15s)
+    const W = m.window.size;
+    const idx = m.window.idx = (m.window.idx + 1) % W;
+    m.window.crosses[idx] = state._stepCrosses || 0;
+    m.window.green[idx] = 1;
+    m.window.idle[idx] = state._idleThisStep ? 1 : 0;
+    const winLen = Math.min(m.steps, W);
+    let sCross=0, sGreen=0, sIdle=0; for (let i=0;i<winLen;i++){ const j=(idx - i + W) % W; sCross += m.window.crosses[j]; sGreen += m.window.green[j]; sIdle += m.window.idle[j]; }
+    const flowWin = (sCross / Math.max(1, winLen)) * 1000;
+    const idleWin = (sIdle / Math.max(1, sGreen)) * 100;
+    const p95Win = m.waits.length? avg(m.waits.slice(-Math.min(10, m.waits.length))) : 0;
     if (embedMode){
       // report up to parent for compare badge
       try{
-        window.parent.postMessage({type:'metrics', id: embedId, p95, flow: flowRate, idle: idlePct, steps: m.steps}, '*');
+        window.parent.postMessage({type:'metrics', id: embedId, p95, flow: flowRate, idle: idlePct, steps: m.steps, win: {p95: p95Win, flow: flowWin, idle: idleWin}}, '*');
       }catch(e){}
     }
   }
@@ -811,6 +830,8 @@ function init(){
         updateCompareBadge();
       }
     });
+    const badgeEl = document.getElementById('cmpBadge');
+    badgeEl?.addEventListener('click', ()=>{ compareUseWindow = !compareUseWindow; updateCompareBadge(); });
   }
 
   resetSim();
