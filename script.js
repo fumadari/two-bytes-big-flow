@@ -771,7 +771,10 @@ function init(){
     bgToggle.checked = presetBG === '1';
     bgToggle.disabled = true;
     canvas.title = '';
-    badge.hidden = false; badge.textContent = bgToggle.checked? 'BG ON' : 'BG OFF';
+    // hide internal badges/HUD to keep compare panes clean
+    try { document.getElementById('hud')?.classList.add('hidden'); } catch(e){}
+    try { badge.hidden = true; } catch(e){}
+    try { toast.hidden = true; } catch(e){}
   } else {
     bgToggle.checked = false;
     // compare mode wiring
@@ -825,11 +828,14 @@ function updateCompareBadge(){
   const el = document.getElementById('cmpBadge');
   const off = compareStats.off, on = compareStats.on;
   if (!el) return;
-  if (!off || !on){ el.textContent = 'BG advantage: —'; return; }
-  // Use throughput flow (/1k steps) as simple intuitive metric
-  const adv = ((on.flow - off.flow) / Math.max(1e-6, off.flow)) * 100;
-  const sign = adv>=0 ? '+' : '';
-  el.textContent = `BG advantage: ${sign}${adv.toFixed(0)}% throughput`;
+  if (!off || !on){ el.textContent = 'BG: —'; return; }
+  // Percentage improvements (higher-is-better for flow; lower-is-better for p95 and idle)
+  const pct = (num) => (Math.abs(num) >= 9.95 ? Math.round(num) : num.toFixed(1));
+  const flowAdv = ((on.flow - off.flow) / Math.max(1e-6, off.flow)) * 100;
+  const p95Gain = ((off.p95 - on.p95) / Math.max(1e-6, off.p95)) * 100;
+  const idleGain = ((off.idle - on.idle) / Math.max(1e-6, off.idle)) * 100;
+  const s = (v)=> (v>=0?'+':'') + pct(v) + '%';
+  el.textContent = `Flow ${s(flowAdv)}   |   p95 ${s(p95Gain)}   |   Idle ${s(idleGain)}`;
 }
 
 init();
