@@ -317,11 +317,11 @@ function axisQueue(axis){
 
 // Movement & crossing rules
 function moveCars(){
-  const speed = 2.0;
+  const speed = 1.8; // slightly slower for clarity and spacing
   for (const car of state.cars){
     let canGo = false;
     // check if at stop line and green
-    const atStop = distToStop(car) < 5;
+    const atStop = distToStop(car) < 6;
     const green = (car.axis === state.phase);
     if (green && atStop) {
       // probability to go depends on logistic(logit)
@@ -334,13 +334,19 @@ function moveCars(){
       let v = speed;
       if (ahead){
         const gap = distance(car, ahead);
-        if (gap < 20) v = 0; else if (gap < 40) v *= 0.25; else if (gap < 60) v *= 0.6;
+        if (gap < 22) v = 0; else if (gap < 42) v *= 0.25; else if (gap < 64) v *= 0.6;
       }
       if (!green && willCross(car, v)) v = 0; // stop at red
       advance(car, v * car.dir);
     } else if (canGo) {
       // cross intersection
-      advance(car, 12 * car.dir);
+      // ensure not tailgating during crossing
+      const ahead = frontCar(car);
+      if (ahead){
+        const gap = distance(car, ahead);
+        if (gap < 26) { continue; }
+      }
+      advance(car, 8 * car.dir);
       // count crossing once
       state.metrics.flowCount++;
       if (car.axis==='H') state.metrics.servedH++; else state.metrics.servedV++;
@@ -507,47 +513,11 @@ function draw(){
   ctx.clearRect(0,0,W,H);
   drawRoads();
   drawSignals();
-  // Minimal visuals
-  drawConsensusBar();
   // Broadcast Wi‑Fi rings when BG is ON
   drawWifiBursts();
   drawCars();
   // Optionally still show push flashes subtly (but disabled for simplicity)
   // drawPushFlashes();
-}
-
-function drawConsensusBar(){
-  // Simple, compact consensus gauge: center pill with dot toward favored axis
-  const uH = state.agg.H.U || 0, uV = state.agg.V.U || 0;
-  const rho = ((state.agg.H.rho||0) + (state.agg.V.rho||0)) / 2;
-  const v = clamp((uH - uV)/2, -1, 1); // -1 favors V, +1 favors H
-  const w = 140, h = 8, r = 6;
-  const x = cx - w/2, y = 12;
-  // background
-  ctx.fillStyle = '#1a2148';
-  ctx.beginPath();
-  ctx.moveTo(x+r, y);
-  ctx.arcTo(x+w, y, x+w, y+h, r);
-  ctx.arcTo(x+w, y+h, x, y+h, r);
-  ctx.arcTo(x, y+h, x, y, r);
-  ctx.arcTo(x, y, x+w, y, r);
-  ctx.fill();
-  // left (V) and right (H) fills, intensity by rho
-  ctx.globalAlpha = 0.5 + 0.5*rho;
-  ctx.fillStyle = COL.accent; // V tint
-  ctx.fillRect(x, y, w/2, h);
-  ctx.fillStyle = COL.accent2; // H tint
-  ctx.fillRect(x+w/2, y, w/2, h);
-  ctx.globalAlpha = 1;
-  // center marker
-  ctx.fillStyle = '#2c3973';
-  ctx.fillRect(x+w/2-1, y, 2, h);
-  // dot indicating preference
-  const dotX = x + w/2 + v*(w/2 - 6);
-  ctx.beginPath();
-  ctx.arc(dotX, y+h/2, 4, 0, Math.PI*2);
-  ctx.fillStyle = v>=0 ? COL.accent2 : COL.accent;
-  ctx.fill();
 }
 
 function drawGuideOverlay(){
@@ -700,7 +670,14 @@ function aggregatorPos(axis){
 }
 
 function drawCars(){
-  for (const c of state.cars){
+  const active = state.phase;
+  const reds = state.cars.filter(c=>c.axis!==active);
+  const greens = state.cars.filter(c=>c.axis===active);
+  // Sort for layering: draw farther-behind first, leading on top
+  const key = (c)=> (c.axis==='H' ? c.x * c.dir : c.y * c.dir);
+  reds.sort((a,b)=> key(a)-key(b));
+  greens.sort((a,b)=> key(a)-key(b));
+  const drawCar = (c)=>{
     const w=14,h=8;
     ctx.save();
     ctx.translate(c.x, c.y);
@@ -708,9 +685,9 @@ function drawCars(){
     ctx.fillStyle = c.axis==='H'? COL.carH : COL.carV;
     ctx.fillRect(-w/2,-h/2,w,h);
     ctx.restore();
-
-    // Bubbles with numbers are hidden for simplicity
-  }
+  };
+  for (const c of reds) drawCar(c);
+  for (const c of greens) drawCar(c);
 }
 
 
