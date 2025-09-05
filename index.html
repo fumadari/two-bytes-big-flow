@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Two Bytes, Big Flow — BG Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <h1>Two Bytes, Big Flow</h1>
+        <div class="spacer"></div>
+        <div class="toggleWrap" title="Compare mode">
+          <span class="lbl">Compare</span>
+          <label class="switch">
+            <input type="checkbox" id="compareToggle" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggleWrap" title="BG overlay">
+          <span class="lbl">BG</span>
+          <label class="switch">
+            <input type="checkbox" id="bgToggle" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </header>
+      <main id="stage">
+        <canvas id="sim"></canvas>
+        <div id="hud">
+          <div class="chip"><span>p95</span><b id="p95">—</b></div>
+          <div class="chip"><span>flow/1k</span><b id="flow">—</b></div>
+          <div class="chip"><span>idle%</span><b id="idle">—</b></div>
+        </div>
+        <div id="toast" hidden></div>
+        <div id="badge" hidden></div>
+      </main>
+      <section id="compare" class="hidden">
+        <div class="col">
+          <div class="colHead">BG OFF</div>
+          <iframe id="frameOff" title="BG OFF" loading="eager"></iframe>
+        </div>
+        <div class="col">
+          <div class="colHead">BG ON</div>
+          <iframe id="frameOn" title="BG ON" loading="eager"></iframe>
+        </div>
+        <div id="cmpBadge" class="cmpBadge">BG advantage: —</div>
+      </section>
+      <footer class="footnote">Tap canvas to toggle BG • 2 bytes/cycle • stop‑gradient</footer>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+  </html>
