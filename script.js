@@ -93,7 +93,6 @@ let embedMode = false;
 let presetBG = null;
 let embedId = null; // 'off' | 'on'
 let compareStats = { off: null, on: null };
-let compareUseWindow = true; // default to rolling window view
 let boostMode = true; // stretch scenario so BG dominates
 
 function resetSim() {
@@ -108,6 +107,7 @@ function resetSim() {
     agg: { H:{U:0,rho:0}, V:{U:0,rho:0} },
     metrics: {
       waits: [],
+      crossWaits: [],
       flowCount: 0,
       steps: 0,
       greenIdleSteps: 0,
@@ -366,9 +366,14 @@ function moveCars(){
         if (gap < 26) { continue; }
       }
       advance(car, 8 * car.dir);
-      // count crossing once
+      // count crossing once, capture wait for session p95
       state.metrics.flowCount++;
       crossesThisStep++;
+      if (car.waited>0) {
+        const arr = state.metrics.crossWaits;
+        arr.push(car.waited);
+        if (arr.length > 20000) arr.shift();
+      }
       if (car.axis==='H') state.metrics.servedH++; else state.metrics.servedV++;
       // reset logit and waited
       car.waited = 0; car.logit = 0; car.arrivedAt = state.t;
@@ -485,8 +490,9 @@ function updateMetrics(){
 
   // UI + window sample every ~0.5s (15 steps @ 30 FPS)
   if (m.steps % 15 === 0){
-    const p95 = m.waits.length? avg(m.waits.slice(-30)) : 0;
-    p95El.textContent = p95.toFixed(1);
+    // session p95 from observed crossing waits
+    const p95Session = m.crossWaits.length ? percentile(m.crossWaits, 0.95) : 0;
+    p95El.textContent = p95Session.toFixed(1);
 
     const flowRate = (m.flowCount / Math.max(1, m.steps)) * 1000;
     flowEl.textContent = flowRate.toFixed(1);
@@ -512,7 +518,7 @@ function updateMetrics(){
     if (embedMode){
       // report up to parent for compare badge
       try{
-        window.parent.postMessage({type:'metrics', id: embedId, p95, flow: flowRate, idle: idlePct, steps: m.steps, win: {p95: p95Win, flow: flowWin, idle: idleWin}}, '*');
+        window.parent.postMessage({type:'metrics', id: embedId, p95: p95Session, flow: flowRate, idle: idlePct, steps: m.steps}, '*');
       }catch(e){}
     }
   }
@@ -841,8 +847,6 @@ function init(){
         updateCompareBadge();
       }
     });
-    const badgeEl = document.getElementById('cmpBadge');
-    badgeEl?.addEventListener('click', ()=>{ compareUseWindow = !compareUseWindow; updateCompareBadge(); });
   }
 
   resetSim();
@@ -876,14 +880,14 @@ function updateCompareBadge(){
   // Wait for both panes to warm up to avoid noisy early stats
   const minSteps = 180; // wait a bit longer for stable idle ratios
   if (!(off.steps>=minSteps && on.steps>=minSteps)) { el.textContent = 'warming up…'; return; }
-  // Percentage improvements (higher-is-better for flow; lower-is-better for p95 and idle)
+  // Session averages only (no rolling window)
   const pct = (num) => (Math.abs(num) >= 9.95 ? Math.round(num) : num.toFixed(1));
   const base = (v)=> Math.max(1e-6, v);
   const flowAdv = ((on.flow - off.flow) / base(off.flow)) * 100;       // + = better
   const p95Gain = ((off.p95 - on.p95) / base(off.p95)) * 100;          // + = better (p95 smaller)
   const idleGain = ((off.idle - on.idle) / base(off.idle)) * 100;      // + = better (idle smaller)
   const s = (v)=> (v>=0?'+':'') + pct(v) + '%';
-  el.textContent = `Flow ${s(flowAdv)}   |   p95 ${s(p95Gain)}   |   Idle ${s(idleGain)}`;
+  el.textContent = `Overall — Flow ${s(flowAdv)}   |   p95 ${s(p95Gain)}   |   Idle ${s(idleGain)}`;
 }
 
 init();
