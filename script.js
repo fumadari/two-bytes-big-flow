@@ -93,6 +93,7 @@ let embedMode = false;
 let presetBG = null;
 let embedId = null; // 'off' | 'on'
 let compareStats = { off: null, on: null };
+let boostMode = true; // stretch scenario so BG dominates
 
 function resetSim() {
   state = {
@@ -286,7 +287,7 @@ function schedulerStep() {
     return;
   }
   // BG ON: use consensus to resist switching unless confident advantage
-  const demoBoost = 1.4; // exaggerate for clarity when BG is ON
+  const demoBoost = boostMode ? 2.0 : 1.4; // more tilt in showcase mode
   const adjDiff = qDiff - (params.kConsensus*demoBoost) * Uother;
   if (forceSwitch) { switchPhase('forced'); return; }
   if (adjDiff > thresh) switchPhase('consensus');
@@ -767,9 +768,12 @@ function init(){
   embedMode = usp.get('embed') === '1';
   presetBG = usp.get('bg');
   embedId = usp.get('id');
+  const boostParam = usp.get('boost');
+  boostMode = boostParam === null ? true : boostParam !== '0';
 
   recomputeGeom();
   window.addEventListener('resize', recomputeGeom);
+  applyBoostDefaults(boostMode);
 
   if (embedMode){
     document.querySelector('.topbar')?.classList.add('hidden');
@@ -790,8 +794,9 @@ function init(){
       if (on){
         const off = document.getElementById('frameOff');
         const onf = document.getElementById('frameOn');
-        off.src = location.pathname + '?embed=1&bg=0&id=off';
-        onf.src = location.pathname + '?embed=1&bg=1&id=on';
+        const boost = boostMode ? '&boost=1' : '&boost=0';
+        off.src = location.pathname + '?embed=1&bg=0&id=off' + boost;
+        onf.src = location.pathname + '?embed=1&bg=1&id=on' + boost;
       }
     });
     // default: single view; compare remains available via toggle
@@ -807,6 +812,25 @@ function init(){
 
   resetSim();
   requestAnimationFrame(tick);
+}
+
+function applyBoostDefaults(on){
+  if (!on) return; // keep current defaults
+  // Heavier, burstier, longer cycles, higher loss — accentuates BG benefits
+  params.loadPerAxis = 1.25;
+  params.packetLoss = 0.65;
+  params.burstiness = 0.6;
+  params.minGreen = 80;
+  params.maxGreen = 260;
+  params.switchThresh = 4;
+  params.kLowInfo = 45;
+  params.kConsensus = 2.4; // stronger consensus tilt
+  params.deltaLogit = 1.1; // stronger nudge
+  params.clipA = 1.8;
+  params.TTL = 20; // fresher packets
+  params.tauFresh = 12;
+  params.sigmaDist = 50;
+  params.fairnessCap = 280;
 }
 
 function updateCompareBadge(){
