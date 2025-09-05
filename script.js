@@ -112,7 +112,9 @@ function resetSim() {
       steps: 0,
       greenIdleSteps: 0,
       greenSteps: 0,
-      window: { size: 450, idx: 0, crosses: Array(450).fill(0), green: Array(450).fill(0), idle: Array(450).fill(0) },
+      // rolling window (~0.5s per sample). 1200 ~= 10 minutes
+      window: { size: 1200, idx: 0, samples: 0, crosses: Array(1200).fill(0), steps: Array(1200).fill(0), idle: Array(1200).fill(0) },
+      windowAcc: { crosses: 0, steps: 0, idle: 0 },
       servedH: 0,
       servedV: 0,
       bitsSent: 0,
@@ -461,6 +463,10 @@ let metricAccum = {flowWindow:0};
 function updateMetrics(){
   const m = state.metrics;
   m.steps++;
+  // accumulate per-step into window accumulator
+  m.windowAcc.crosses += (state._stepCrosses || 0);
+  m.windowAcc.steps += 1;
+  m.windowAcc.idle += (state._idleThisStep ? 1 : 0);
   // estimate waits: capture per-crossing wait by sampling lead near gate that crosses
   // Here we approximate: sample waits of cars at near gate
   // For p95 we keep rolling window of waits of cars whose waited just reset after crossing
@@ -477,7 +483,7 @@ function updateMetrics(){
     metricAccum.flowWindow = 0;
   }
 
-  // UI update every ~0.5s
+  // UI + window sample every ~0.5s (15 steps @ 30 FPS)
   if (m.steps % 15 === 0){
     const p95 = m.waits.length? avg(m.waits.slice(-30)) : 0;
     p95El.textContent = p95.toFixed(1);
@@ -487,16 +493,21 @@ function updateMetrics(){
 
     const idlePct = m.greenSteps>0? (m.greenIdleSteps/m.greenSteps*100):0;
     idleEl.textContent = idlePct.toFixed(1);
-    // rolling window update (last ~15s)
+    // rolling window commit
     const W = m.window.size;
     const idx = m.window.idx = (m.window.idx + 1) % W;
-    m.window.crosses[idx] = state._stepCrosses || 0;
-    m.window.green[idx] = 1;
-    m.window.idle[idx] = state._idleThisStep ? 1 : 0;
-    const winLen = Math.min(m.steps, W);
-    let sCross=0, sGreen=0, sIdle=0; for (let i=0;i<winLen;i++){ const j=(idx - i + W) % W; sCross += m.window.crosses[j]; sGreen += m.window.green[j]; sIdle += m.window.idle[j]; }
-    const flowWin = (sCross / Math.max(1, winLen)) * 1000;
-    const idleWin = (sIdle / Math.max(1, sGreen)) * 100;
+    m.window.crosses[idx] = m.windowAcc.crosses;
+    m.window.steps[idx] = m.windowAcc.steps;
+    m.window.idle[idx] = m.windowAcc.idle;
+    m.window.samples = Math.min(W, m.window.samples + 1);
+    // reset accumulator
+    m.windowAcc.crosses = 0; m.windowAcc.steps = 0; m.windowAcc.idle = 0;
+    // window aggregates over samples
+    const samples = m.window.samples;
+    let sCross=0, sSteps=0, sIdle=0;
+    for (let i=0;i<samples;i++){ const j=(idx - i + W) % W; sCross += m.window.crosses[j]; sSteps += m.window.steps[j]; sIdle += m.window.idle[j]; }
+    const flowWin = (sCross / Math.max(1, sSteps)) * 1000;
+    const idleWin = (sIdle / Math.max(1, sSteps)) * 100;
     const p95Win = m.waits.length? avg(m.waits.slice(-Math.min(10, m.waits.length))) : 0;
     if (embedMode){
       // report up to parent for compare badge
